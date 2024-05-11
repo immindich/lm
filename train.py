@@ -156,7 +156,8 @@ def main():
         n_heads = 8,
         n_layers = 8,
         layer_norm_eps = 1e-8,
-        ctx_len = 512
+        ctx_len = 512,
+        rmsnorm = True
     )
 
     step = 0

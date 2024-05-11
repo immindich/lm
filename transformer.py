@@ -15,6 +15,7 @@ class Config:
     ctx_len : int
     layer_norm_eps : float
     n_layers : int
+    rmsnorm : bool
 
 class Embed(nn.Module):
     def __init__(self, cfg):
@@ -142,6 +143,17 @@ class LayerNorm(nn.Module):
         s = (x.var(2, keepdim = True, unbiased = False) + self.cfg.layer_norm_eps).sqrt()
         return ((x - e) / s) * self.w + self.b
 
+class RMSNorm(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.cfg = cfg
+        self.gain = nn.Parameter(torch.ones(cfg.d_model))
+
+    def forward(self, x):
+        # x : (batch, seq, d_model)
+        rms_inv = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + 1e-6)
+        return x * self.gain * rms_inv
+
 class MLP(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -158,9 +170,9 @@ class TransformerBlock(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.ln1 = LayerNorm(cfg)
+        self.ln1 = RMSNorm(cfg) if cfg.rmsnorm else LayerNorm(cfg)
         self.attn = SelfAttention(cfg)
-        self.ln2 = LayerNorm(cfg)
+        self.ln2 = RMSNorm(cfg) if cfg.rmsnorm else LayerNorm(cfg)
         self.mlp = MLP(cfg)
 
     def forward(self, x):
