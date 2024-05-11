@@ -1,0 +1,8 @@
+*.pth
+*.json
+*~
+*.tex
+__pycache__
+runs
+gpt-env
+.ipynb_checkpoints
