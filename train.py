@@ -88,7 +88,7 @@ def train(model, name, train_cfg, interval=1000, step=0, log_dir=None):
     model.train()
     opt = torch.optim.AdamW(model.parameters(), train_cfg.lr)
 
-    print(f"Training {train_cfg.batches} batches of size {train_cfg.batch_size} ({train_cfg.batch_size * train_cfg.minibatch_size * model.cfg.ctx_len * train_cfg.batches} tokens)")
+    print(f"Training {train_cfg.batches} batches of size {train_cfg.batch_size * train_cfg.minibatch_size} ({train_cfg.batch_size * train_cfg.minibatch_size * model.cfg.ctx_len * train_cfg.batches} tokens)")
 
     for i in range(step, train_cfg.batches):
         total_tokens = i * train_cfg.batch_size * train_cfg.minibatch_size * model.cfg.ctx_len
@@ -142,22 +142,22 @@ def load_metadata(metadata_json):
 
 def main():
     train_cfg = TrainConfig(
-        batch_size = 20,
-        minibatch_size = 20,
-        batches = 20000,
-        warmup_iters = 200,
-        decay_iters = 20000,
-        lr = 5e-4,
+        batch_size = 30,
+        minibatch_size = 30,
+        batches = 30000,
+        warmup_iters = 1000,
+        decay_iters = 30000,
+        lr = 4e-4,
         decay_factor = 0.1
     )
 
     model_cfg = transformer.Config(
-        d_model = 512,
+        d_model = 768,
         d_mlp = 2048,
         d_vocab = 50304,
         d_head = 64,
-        n_heads = 8,
-        n_layers = 8,
+        n_heads = 12,
+        n_layers = 12,
         layer_norm_eps = 1e-8,
         ctx_len = 512,
         rmsnorm = True,
