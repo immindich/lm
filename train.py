@@ -128,6 +128,9 @@ def train(model, name, train_cfg, interval=1000, step=0, log_dir=None):
     if log_dir is not None:
         writer.flush()
 
+    save_model(model, name)
+    save_metadata(model, name, train_cfg, i+1)
+
 def load_metadata(metadata_json):
     metadata = json.loads(metadata_json)
     model_cfg = transformer.Config(**metadata['model'])
