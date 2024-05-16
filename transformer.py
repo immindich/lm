@@ -16,6 +16,7 @@ class Config:
     layer_norm_eps : float
     n_layers : int
     rmsnorm : bool
+    swiglu : bool
 
 class Embed(nn.Module):
     def __init__(self, cfg):
@@ -166,6 +167,18 @@ class MLP(nn.Module):
         activations = F.gelu(preact)
         return self.W_out(activations)
 
+class GatedFFN(nn.Module):
+    def __init__(self, cfg, gating_fn):
+        super().__init__()
+        self.cfg = cfg
+        self.W1 = nn.Linear(cfg.d_model, cfg.d_mlp, bias=False)
+        self.W2 = nn.Linear(cfg.d_mlp, cfg.d_model, bias=False)
+        self.V = nn.Linear(cfg.d_model, cfg.d_mlp, bias=False)
+        self.gating_fn = gating_fn
+
+    def forward(self, x):
+        return self.W2(self.gating_fn(self.W1(x)) * self.V(x))
+
 class TransformerBlock(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -173,7 +186,7 @@ class TransformerBlock(nn.Module):
         self.ln1 = RMSNorm(cfg) if cfg.rmsnorm else LayerNorm(cfg)
         self.attn = SelfAttention(cfg)
         self.ln2 = RMSNorm(cfg) if cfg.rmsnorm else LayerNorm(cfg)
-        self.mlp = MLP(cfg)
+        self.mlp = GatedFFN(cfg, F.silu) if cfg.swiglu else MLP(cfg)
 
     def forward(self, x):
         resid_mid = x + self.attn(self.ln1(x))

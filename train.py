@@ -157,7 +157,8 @@ def main():
         n_layers = 8,
         layer_norm_eps = 1e-8,
         ctx_len = 512,
-        rmsnorm = True
+        rmsnorm = True,
+        swiglu = True
     )
 
     step = 0
