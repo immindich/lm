@@ -3,20 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 import math
 import einops
-from dataclasses import dataclass
-
-@dataclass
-class Config:
-    d_model : int
-    d_mlp : int
-    n_heads : int
-    d_head : int
-    d_vocab : int
-    ctx_len : int
-    layer_norm_eps : float
-    n_layers : int
-    rmsnorm : bool
-    swiglu : bool
+from config import Config
 
 class Embed(nn.Module):
     def __init__(self, cfg):

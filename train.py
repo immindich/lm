@@ -13,16 +13,7 @@ import sys
 import os
 
 import transformer
-
-@dataclass
-class TrainConfig:
-    batch_size: int
-    minibatch_size: int
-    batches: int
-    warmup_iters: int
-    decay_iters: int
-    lr: float
-    decay_factor: float
+from config import Config, TrainConfig, save_checkpoint, load_checkpoint
 
 def get_lr(cfg, step):
     lr = cfg.lr
@@ -73,20 +64,12 @@ def pause_handler(number, frame):
 def save_model(model, name):
     torch.save(model.state_dict(), f"{name}.pth")
 
-def save_metadata(model, name, train_cfg, steps):
-    metadata = {
-        'model': model.cfg.__dict__,
-        'train': train_cfg.__dict__,
-        'steps' : steps
-    }
-    f=open(f"{name}.json", 'w')
-    json.dump(metadata, f)
 
-def train(model, name, train_cfg, interval=1000, step=0, log_dir=None):
+def train(model, opt, name, train_cfg, interval=1000, step=0, log_dir=None):
+    global pause_training
     if log_dir is not None:
         writer = SummaryWriter(os.path.join('runs', log_dir))
     model.train()
-    opt = torch.optim.AdamW(model.parameters(), train_cfg.lr)
 
     print(f"Training {train_cfg.batches} batches of size {train_cfg.batch_size * train_cfg.minibatch_size} ({train_cfg.batch_size * train_cfg.minibatch_size * model.cfg.ctx_len * train_cfg.batches} tokens)")
 
@@ -120,25 +103,14 @@ def train(model, name, train_cfg, interval=1000, step=0, log_dir=None):
         if pause_training:
             if log_dir is not None:
                 writer.flush()
-            print("Signal received, pausing training")
-            save_model(model, name+f"-step{i+1}")
-            save_metadata(model, name+f"-step{i+1}", train_cfg, i+1)
-            return
+            print("Signal received, saving checkpoint")
+            save_checkpoint(model, opt, name+f"-step{i+1}", train_cfg, i+1)
+            pause_training = False
 
     if log_dir is not None:
         writer.flush()
 
-    save_model(model, name)
-    save_metadata(model, name, train_cfg, i+1)
-
-def load_metadata(metadata_json):
-    metadata = json.loads(metadata_json)
-    model_cfg = transformer.Config(**metadata['model'])
-    train_cfg = TrainConfig(**metadata['train'])
-    print(metadata_json)
-    print(metadata)
-    print(model_cfg)
-    return model_cfg, train_cfg, metadata['steps']
+    save_checkpoint(model, opt, name, train_cfg, i+1)
 
 def main():
     train_cfg = TrainConfig(
@@ -167,22 +139,25 @@ def main():
     step = 0
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-w', '--weights')
-    parser.add_argument('-m', '--metadata')
+    parser.add_argument('-c', '--checkpoint')
     parser.add_argument('-l', '--log')
     parser.add_argument('name')
     args = parser.parse_args()
 
-    if args.metadata is not None:
-        with open(args.metadata, 'r') as f:
-            model_cfg, train_cfg, step = load_metadata(f.read())
+    if args.checkpoint is not None:
+        checkpoint = load_checkpoint(args.checkpoint)
+        model_cfg = Config(**checkpoint['model_cfg'])
+        train_cfg = TrainConfig(**checkpoint['train_cfg'])
+        step = checkpoint['step']
 
     model = transformer.TransformerModel(model_cfg).to(device="cuda", dtype=torch.bfloat16)
+    opt = torch.optim.AdamW(model.parameters(), train_cfg.lr)
 
-    if args.weights is not None:
-       model.load_state_dict(torch.load(args.weights))
+    if args.checkpoint is not None:
+       model.load_state_dict(checkpoint['model'])
+       opt.load_state_dict(checkpoint['optimizer'])
 
-    train(model, args.name, train_cfg, interval=100, step=step, log_dir=args.log)
+    train(model, opt, args.name, train_cfg, interval=100, step=step, log_dir=args.log)
 
 signal.signal(signal.SIGUSR1, pause_handler)
 main()
