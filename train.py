@@ -56,10 +56,13 @@ def validate(model):
     return loss / minibatches
 
 pause_training = False
+stop_training = False
 
 def pause_handler(number, frame):
     global pause_training
+    global stop_training
     pause_training = True
+    stop_training = number == signal.SIGUSR2
 
 def save_model(model, name):
     torch.save(model.state_dict(), f"{name}.pth")
@@ -67,6 +70,8 @@ def save_model(model, name):
 
 def train(model, opt, name, train_cfg, interval=1000, step=0, log_dir=None):
     global pause_training
+    global stop_training
+
     if log_dir is not None:
         writer = SummaryWriter(os.path.join('runs', log_dir))
     model.train()
@@ -105,7 +110,10 @@ def train(model, opt, name, train_cfg, interval=1000, step=0, log_dir=None):
                 writer.flush()
             print("Signal received, saving checkpoint")
             save_checkpoint(model, opt, name+f"-step{i+1}", train_cfg, i+1)
+            if stop_training:
+                return
             pause_training = False
+            stop_training = False
 
     if log_dir is not None:
         writer.flush()
@@ -162,4 +170,5 @@ def main():
     train(model, opt, args.name, train_cfg, interval=100, step=step, log_dir=args.log)
 
 signal.signal(signal.SIGUSR1, pause_handler)
+signal.signal(signal.SIGUSR2, pause_handler)
 main()
