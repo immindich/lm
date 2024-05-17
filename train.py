@@ -5,7 +5,7 @@ from torch.utils.tensorboard import SummaryWriter
 import tiktoken
 import numpy as np
 from dataclasses import dataclass
-from math import cos, pi
+from math import cos, pi, prod
 import signal
 import json
 import argparse
@@ -156,6 +156,8 @@ def main():
     if args.checkpoint is not None:
        model.load_state_dict(checkpoint['model'])
        opt.load_state_dict(checkpoint['optimizer'])
+
+    print("Parameters: ", sum([prod(p.shape) for p in model.parameters()]))
 
     train(model, opt, args.name, train_cfg, interval=100, step=step, log_dir=args.log)
 
