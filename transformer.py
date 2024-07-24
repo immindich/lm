@@ -27,47 +27,24 @@ class Unembed(nn.Module):
     def forward(self, x):
         return x @ self.W_U
 
-class SelfAttention(nn.Module):
+class RotaryEmbedding(nn.Module):
     def __init__(self, cfg):
-        assert cfg.d_model % cfg.n_heads == 0
         super().__init__()
         self.cfg = cfg
-        self.d_head = cfg.d_model // cfg.n_heads
-        self.W_Q = nn.Parameter(torch.empty(cfg.n_heads, cfg.d_model, self.d_head))
-        self.W_K = nn.Parameter(torch.empty(cfg.n_heads, cfg.d_model, self.d_head))
-        self.W_V = nn.Parameter(torch.empty(cfg.n_heads, cfg.d_model, self.d_head))
-        self.W_O = nn.Parameter(torch.empty(cfg.n_heads, self.d_head, cfg.d_model))
-
-        a = math.sqrt(1.0 / cfg.d_model)
-        for m in (self.W_Q, self.W_K, self.W_V):
-            nn.init.uniform_(m, -a, a)
-
-        a = math.sqrt(1.0 / cfg.d_head)
-        nn.init.uniform_(self.W_O, -a, a)
-
-    # x : (batch, seq, d_model)
+        # (d_head / 2)
+        theta = 10000. ** (-torch.arange(0, cfg.d_head,2) / cfg.d_head)
+        # (seq, d_head / 2)
+        angles = torch.outer(torch.arange(cfg.ctx_len), theta)
+        sines = angles.sin()
+        cosines = angles.cos()
+        r = torch.stack((cosines, -sines, sines, cosines), dim=-1)
+        self.register_buffer("rotations", r.view(cfg.ctx_len, cfg.d_head // 2, 2, 2).requires_grad_(False), persistent=False)
+    
+    # x : (batch, head, seq, d_head)
     def forward(self, x):
-        queries = einops.einsum(x, self.W_Q, 'batch seq d_model, n_heads d_model d_head -> batch n_heads seq d_head')
-        keys = einops.einsum(x, self.W_K, 'batch seq d_model, n_heads d_model d_head -> batch n_heads seq d_head')
-        values = einops.einsum(x, self.W_V, 'batch seq d_model, n_heads d_model d_head -> batch n_heads seq d_head')
-
-        # slow version
-        # scores = einops.einsum(queries, keys, 'batch n_heads seq_q d_head, batch n_heads seq_k d_head -> batch n_heads seq_q seq_k') / math.sqrt(self.d_head)
-        # scores_masked = self.mask(scores)
-
-        # weights = scores_masked.softmax(-1)
-        # values_weighted = einops.einsum(weights, values, 'batch n_heads seq_q seq_k, batch n_heads seq_k d_head -> batch seq_q n_heads d_head')
-
-        # fast version
-        values_weighted = F.scaled_dot_product_attention(queries, keys, values, attn_mask=None, dropout_p=0.0, is_causal=True)
-
-        output = einops.einsum(values_weighted, self.W_O, 'batch n_heads seq_q d_head, n_heads d_head d_model -> batch seq_q n_heads d_model')
-        return output.sum(-2)
-
-    def mask(self, scores):
-        mask = torch.triu(torch.ones(scores.size(-2), scores.size(-1), device=scores.device), diagonal=1).bool()
-        scores.masked_fill_(mask, -1e5)
-        return scores
+        x = x.view(x.shape[0], self.cfg.n_heads, self.cfg.ctx_len, self.cfg.d_head // 2, 2)
+        rotated = einops.einsum(self.rotations, x, 'seq d i j, batch head seq d j -> batch head seq d i')
+        return rotated.view(rotated.shape[0], self.cfg.n_heads, self.cfg.ctx_len, self.cfg.d_head)
 
 class SelfAttention(nn.Module):
     def __init__(self, cfg):
@@ -81,6 +58,9 @@ class SelfAttention(nn.Module):
         self.W_O = nn.Parameter(torch.empty(cfg.n_heads, self.d_head, cfg.d_model))
         self.b_O = nn.Parameter(torch.zeros(cfg.d_model))
 
+        if self.cfg.rotary:
+            self.rotary_embed = RotaryEmbedding(cfg)
+
         a = math.sqrt(1.0 / cfg.d_model)
         for m in (self.W_Q, self.W_K, self.W_V, self.W_O):
             nn.init.uniform_(m, -a, a)
@@ -90,6 +70,10 @@ class SelfAttention(nn.Module):
         queries = einops.einsum(x, self.W_Q, 'batch seq d_model, n_heads d_model d_head -> batch n_heads seq d_head')
         keys = einops.einsum(x, self.W_K, 'batch seq d_model, n_heads d_model d_head -> batch n_heads seq d_head')
         values = einops.einsum(x, self.W_V, 'batch seq d_model, n_heads d_model d_head -> batch n_heads seq d_head')
+
+        if self.cfg.rotary:
+            queries = self.rotary_embed(queries)
+            keys = self.rotary_embed(keys)
 
         #scores = einops.einsum(queries, keys, 'batch n_heads seq_q d_head, batch n_heads seq_k d_head -> batch n_heads seq_q seq_k') / math.sqrt(self.d_head)
         #scores_masked = self.mask(scores)
@@ -185,12 +169,16 @@ class TransformerModel(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.embed = Embed(cfg)
-        self.pos = PositionalEmbed(cfg)
+        if not self.cfg.rotary:
+            self.pos = PositionalEmbed(cfg)
         self.layers = nn.ModuleList([TransformerBlock(cfg) for i in range(cfg.n_layers)])
         self.unembed = Unembed(cfg)
 
     def forward(self, x):
-        resid = self.embed(x) + self.pos(x)
+        if self.cfg.rotary:
+            resid = self.embed(x)
+        else:
+            resid = self.embed(x) + self.pos(x)
         for i in range(self.cfg.n_layers):
             resid = self.layers[i](resid)
         return self.unembed(resid)
