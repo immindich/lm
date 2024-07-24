@@ -5,9 +5,9 @@ Current features:
 - Basic decoder-only transformer architecture with learned positional embeddings in the style of GPT-2
 - RMSNorm
 - [Gated feedforward layers](https://arxiv.org/abs/2002.05202)
+- [Rotary Positional Embeddings](https://arxiv.org/abs/2104.09864)
 
 Planned:
 
-- [Rotary Positional Embeddings](https://arxiv.org/abs/2104.09864)
 - Hybrid architectures like [Jamba](https://arxiv.org/pdf/2403.19887)
 - Mixture of Experts
