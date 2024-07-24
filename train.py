@@ -141,7 +141,8 @@ def main():
         layer_norm_eps = 1e-8,
         ctx_len = 512,
         rmsnorm = True,
-        swiglu = True
+        swiglu = True,
+        rotary = False
     )
 
     step = 0

@@ -13,6 +13,7 @@ class Config:
     n_layers : int
     rmsnorm : bool
     swiglu : bool
+    rotary : bool
 
 @dataclass
 class TrainConfig:
