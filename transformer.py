@@ -42,9 +42,11 @@ class RotaryEmbedding(nn.Module):
     
     # x : (batch, head, seq, d_head)
     def forward(self, x):
-        x = x.view(x.shape[0], self.cfg.n_heads, self.cfg.ctx_len, self.cfg.d_head // 2, 2)
-        rotated = einops.einsum(self.rotations, x, 'seq d i j, batch head seq d j -> batch head seq d i')
-        return rotated.view(rotated.shape[0], self.cfg.n_heads, self.cfg.ctx_len, self.cfg.d_head)
+        seq = x.shape[2]
+        batch = x.shape[0]
+        x = x.view(batch, self.cfg.n_heads, seq, self.cfg.d_head // 2, 2)
+        rotated = einops.einsum(self.rotations[:seq], x, 'seq d i j, batch head seq d j -> batch head seq d i')
+        return rotated.view(batch, self.cfg.n_heads, seq, self.cfg.d_head)
 
 class SelfAttention(nn.Module):
     def __init__(self, cfg):
