@@ -5,4 +5,5 @@
 __pycache__
 runs
 gpt-env
+.venv
 .ipynb_checkpoints

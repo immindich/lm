@@ -1,0 +1,22 @@
+[project]
+name = "lm"
+version = "0.1.0"
+description = "Training and running small autoregressive transformer language models"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "einops",
+    "numpy",
+    "tensorboard",
+    "tiktoken",
+    "torch",
+]
+
+[dependency-groups]
+notebook = [
+    "jupyter",
+]
+
+[tool.uv]
+default-groups = ["notebook"]
+package = false
